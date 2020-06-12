@@ -1,8 +1,5 @@
 package ru.idemidov.interviewgateway;
 
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiModel;
-import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,9 +10,6 @@ import ru.idemidov.interviewgateway.model.Code;
 import ru.idemidov.interviewgateway.model.Result;
 import ru.idemidov.interviewgateway.service.Main;
 import ru.idemidov.interviewgateway.service.QueueService;
-
-import javax.websocket.server.PathParam;
-import java.io.IOException;
 
 @RestController
 @RequestMapping(value = "api/v1", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -37,22 +31,21 @@ public class MainController {
             return ResponseEntity.badRequest().build();
         }
         try {
-            //TODO sync invocation
             queueService.send(code.getCode());
             return ResponseEntity.ok(new Result(null, null));
         } catch (InterviewException e) {
             return ResponseEntity.ok(new Result(null, e.getMessage()));
         }
-
-//        return ResponseEntity.ok(new Result("", null));
     }
 
     @GetMapping(value = "get_result/{codeHash}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.ALL_VALUE)
+    @ApiParam(value = "Returns code execution result by code MD5 hash")
     public ResponseEntity<Result> getResult(@PathVariable String codeHash) {
         return ResponseEntity.ok(codeService.getResultByCodeHash(codeHash));
     }
 
     @PostMapping("save_tmp")
+    @ApiParam(value = "Saves current code to be able to observe it for others")
     public ResponseEntity<String> saveTmp(@RequestBody Code code) {
         log.info("save_tmp invoked");
         codeService.saveTmpCodeFile(code.getUsername(), code.getCode());
@@ -60,6 +53,7 @@ public class MainController {
     }
 
     @GetMapping(value = "read_tmp/{userName}")
+    @ApiParam(value = "Returns current code")
     public ResponseEntity<Result> readTmp(@PathVariable String userName) {
         log.info("read_tmp invoked");
         return ResponseEntity.ok(new Result(codeService.getTmpCodeFile(userName), ""));

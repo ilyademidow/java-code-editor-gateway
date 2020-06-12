@@ -5,6 +5,7 @@ import org.redisson.Redisson;
 import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.idemidov.interviewgateway.InterviewException;
 import ru.idemidov.interviewgateway.model.Result;
@@ -20,6 +21,11 @@ import java.nio.file.StandardOpenOption;
 public class Main {
     private static final String TMP_CODE_FILE_NAME = "java_code_tmp.txt";
     private static final String TMP_CODE_PATH = "interview/";
+
+    @Value("${redis.url}")
+    private String redisUrl;
+    @Value("${redis.map}")
+    private String redisMapName;
 
     /**
      * Read temporary code (can be use for an interviewer)
@@ -58,11 +64,16 @@ public class Main {
         return new String(b);
     }
 
+    /**
+     * Returns code execution result by code MD5 hash
+     * @param codeHash MD5 code hash
+     * @return code execution result
+     */
     public Result getResultByCodeHash(String codeHash) {
         Config config = new Config();
-        config.useSingleServer().setAddress("redis://127.0.0.1:6379");
+        config.useSingleServer().setAddress(redisUrl);
         RedissonClient redisson = Redisson.create(config);
-        RMap<String, String> map = redisson.getMap("code-result");
+        RMap<String, String> map = redisson.getMap(redisMapName);
         String mapValue = map.get(codeHash);
         log.info("stored map value: " + mapValue);
         redisson.shutdown();

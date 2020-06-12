@@ -7,11 +7,11 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class AppConfig {
-    @Value("${rabbitmq.queue.result}")
-    private String resultQueueName;
+    @Value("${rabbitmq.queue.code}")
+    private String codeSentQueueName;
 
     @Bean
     public Queue initResultQueue() {
-        return new Queue("code");
+        return new Queue(codeSentQueueName);
     }
 }

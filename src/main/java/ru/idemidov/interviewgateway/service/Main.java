@@ -65,16 +65,16 @@ public class Main {
     }
 
     /**
-     * Returns code execution result by code MD5 hash
-     * @param codeHash MD5 code hash
+     * Returns code execution result by username MD5 hash
+     * @param userNameMD5Hash MD5 hash of username
      * @return code execution result
      */
-    public Result getResultByCodeHash(String codeHash) {
+    public Result getResultByCodeHash(String userNameMD5Hash) {
         Config config = new Config();
         config.useSingleServer().setAddress(redisUrl);
         RedissonClient redisson = Redisson.create(config);
         RMap<String, String> map = redisson.getMap(redisMapName);
-        String mapValue = map.get(codeHash);
+        String mapValue = map.get(userNameMD5Hash);
         log.info("stored map value: " + mapValue);
         redisson.shutdown();
         if (mapValue.contains("Exit code 0")) {

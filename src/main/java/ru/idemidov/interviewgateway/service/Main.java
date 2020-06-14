@@ -38,13 +38,14 @@ public class Main {
             final String filePath = TMP_CODE_PATH + username;
             if (!Files.exists(Paths.get(filePath))) {
                 if(!dir.mkdir()) {
-                    log.error("Unable to create dir " + TMP_CODE_PATH + filePath);
+                    log.error("Unable to create dir {}", TMP_CODE_PATH + filePath);
                     throw new InterviewException("Sorry... Try again later!");
                 }
             }
             Files.write(Paths.get(filePath, TMP_CODE_FILE_NAME), rawCode.getBytes(), StandardOpenOption.CREATE);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error(e.getMessage(), e);
+            throw new InterviewException("Sorry... Try again later!");
         }
     }
 
@@ -59,7 +60,7 @@ public class Main {
         try {
             b = Files.readAllBytes(Paths.get(filePath, TMP_CODE_FILE_NAME));
         } catch (IOException e) {
-            log.error(e.getMessage());
+            log.error(e.getMessage(), e);
         }
         return new String(b);
     }
@@ -75,7 +76,7 @@ public class Main {
         RedissonClient redisson = Redisson.create(config);
         RMap<String, String> map = redisson.getMap(redisMapName);
         String mapValue = map.get(userNameMD5Hash);
-        log.info("stored map value: " + mapValue);
+        log.info("Value from map {} is {} by key {}", mapValue, redisMapName, userNameMD5Hash);
         redisson.shutdown();
         if (mapValue.contains("Exit code 0")) {
             return new Result(mapValue,"");

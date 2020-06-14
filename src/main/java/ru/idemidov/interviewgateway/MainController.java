@@ -24,13 +24,13 @@ public class MainController {
     @PostMapping("run")
     @ApiOperation(value = "Executes implementation of a Java code")
     public ResponseEntity<Result> execute(@RequestBody Code code) {
-        log.info(("Invoked " + code));
+        log.info("[execute] received {}", code);
 
         if (code.getUsername().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
         try {
-            queueService.send(code.getCode());
+            queueService.send(code);
             return ResponseEntity.ok(new Result(null, null));
         } catch (InterviewException e) {
             return ResponseEntity.ok(new Result(null, e.getMessage()));
@@ -40,14 +40,14 @@ public class MainController {
     @GetMapping(value = "get_result/{codeHash}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.ALL_VALUE)
     @ApiOperation(value = "Returns code execution result by code MD5 hash")
     public ResponseEntity<Result> getResult(@PathVariable String codeHash) {
-        log.info("codeHash: " + codeHash);
+        log.info("[getResult] received {}", codeHash);
         return ResponseEntity.ok(codeService.getResultByCodeHash(codeHash));
     }
 
     @PostMapping("save_tmp")
     @ApiOperation(value = "Saves current code to be able to observe it for others")
     public ResponseEntity<String> saveTmp(@RequestBody Code code) {
-        log.info("save_tmp invoked");
+        log.info("[saveTmp] received {}", code);
         codeService.saveTmpCodeFile(code.getUsername(), code.getCode());
         return ResponseEntity.ok().build();
     }
@@ -55,7 +55,7 @@ public class MainController {
     @GetMapping(value = "read_tmp/{userName}", produces = MediaType.TEXT_PLAIN_VALUE, consumes = MediaType.ALL_VALUE)
     @ApiOperation(value = "Returns current code of requested author")
     public ResponseEntity<String> readTmp(@PathVariable String userName) {
-        log.info("read_tmp invoked");
+        log.info("[readTmp] received {}", userName);
         return ResponseEntity.ok(codeService.getTmpCodeFile(userName));
     }
 }

@@ -23,18 +23,15 @@ public class MainController {
 
     @PostMapping("run")
     @ApiOperation(value = "Executes implementation of a Java code")
-    public ResponseEntity<Result> execute(@RequestBody Code code) {
+    public ResponseEntity<Object> execute(@RequestBody Code code) {
         log.info("[execute] received {}", code);
 
         if (code.getUsername().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        try {
-            queueService.send(code);
-            return ResponseEntity.ok(new Result(null, null));
-        } catch (InterviewException e) {
-            return ResponseEntity.ok(new Result(null, e.getMessage()));
-        }
+        queueService.send(code);
+
+        return ResponseEntity.ok(new Object());
     }
 
     @GetMapping(value = "get_result/{codeHash}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.ALL_VALUE)

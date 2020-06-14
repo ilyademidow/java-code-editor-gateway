@@ -72,16 +72,24 @@ public class Main {
      */
     public Result getResultByCodeHash(String userNameMD5Hash) {
         Config config = new Config();
-        config.useSingleServer().setAddress(redisUrl);
-        RedissonClient redisson = Redisson.create(config);
-        RMap<String, String> map = redisson.getMap(redisMapName);
-        String mapValue = map.get(userNameMD5Hash);
-        log.info("Value from map {} is {} by key {}", mapValue, redisMapName, userNameMD5Hash);
-        redisson.shutdown();
-        if (mapValue.contains("Exit code 0")) {
-            return new Result(mapValue,"");
-        } else {
-            return new Result("", mapValue);
+        try {
+            config.useSingleServer().setAddress(redisUrl);
+            RedissonClient redisson = Redisson.create(config);
+            RMap<String, String> map = redisson.getMap(redisMapName);
+            String mapValue = map.get(userNameMD5Hash);
+            log.info("Value from map {} is {} by key {}", redisMapName, mapValue, userNameMD5Hash);
+            redisson.shutdown();
+            if (mapValue != null) {
+                if (mapValue.contains("Exit code 0")) {
+                    return new Result(mapValue, "");
+                } else {
+                    return new Result("", mapValue);
+                }
+            } else {
+                return new Result("", "Result is unavailable. Run your code again or wait until we resolve an error");
+            }
+        } catch (Exception e) {
+            return new Result("", "Sorry, one of our services is unavailable at this moment. Please run your code later");
         }
     }
 }

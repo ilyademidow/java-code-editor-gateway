@@ -13,6 +13,7 @@ import ru.idemidov.interviewgateway.model.Result;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
@@ -20,7 +21,7 @@ import java.nio.file.StandardOpenOption;
 @Service
 public class Main {
     private static final String TMP_CODE_FILE_NAME = "java_code_tmp.txt";
-    private static final String TMP_CODE_PATH = "interview/";
+    private static final String TMP_CODE_PATH = "interview";
 
     @Value("${redis.url}")
     private String redisUrl;
@@ -34,15 +35,16 @@ public class Main {
      */
     public void saveTmpCodeFile(final String username, final String rawCode) {
         try {
-            File dir = new File(TMP_CODE_PATH, username);
-            final String filePath = TMP_CODE_PATH + username;
-            if (!Files.exists(Paths.get(filePath))) {
-                if(!dir.mkdir()) {
+            final Path filePath = Paths.get(TMP_CODE_PATH, username);
+            if (!Files.exists(filePath)) {
+                try {
+                    Files.createDirectories(filePath);
+                } catch (IOException ioException) {
                     log.error("Unable to create dir {}", TMP_CODE_PATH + filePath);
                     throw new InterviewException("Sorry... Try again later!");
                 }
             }
-            Files.write(Paths.get(filePath, TMP_CODE_FILE_NAME), rawCode.getBytes(), StandardOpenOption.CREATE);
+            Files.write(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME), rawCode.getBytes(), StandardOpenOption.CREATE);
         } catch (IOException e) {
             log.error(e.getMessage(), e);
             throw new InterviewException("Sorry... Try again later!");
@@ -55,10 +57,10 @@ public class Main {
      * @return Code as text
      */
     public String getTmpCodeFile(final String username) {
-        final String filePath = TMP_CODE_PATH + username;
+        final Path filePath = Paths.get(TMP_CODE_PATH, username);
         byte[] b = new byte[1];
         try {
-            b = Files.readAllBytes(Paths.get(filePath, TMP_CODE_FILE_NAME));
+            b = Files.readAllBytes(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME));
         } catch (IOException e) {
             log.error(e.getMessage(), e);
         }

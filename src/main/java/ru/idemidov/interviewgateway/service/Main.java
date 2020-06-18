@@ -6,10 +6,8 @@ import org.redisson.Redisson;
 import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.springframework.amqp.AmqpException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.MessageSource;
-import org.springframework.context.i18n.LocaleContextHolder;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import ru.idemidov.interviewgateway.exceptions.BadRequestException;
 import ru.idemidov.interviewgateway.exceptions.InternalException;
@@ -21,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Locale;
 
 @Service
 @Slf4j
@@ -31,14 +28,14 @@ public class Main {
     private static final String TMP_CODE_PATH = "interview";
 
     // L10n message codes
-    private static final String ERROR_SHORTEN_YOUR_CODE = "error.bad-request.shorten-your-code";
-    private static final String ERROR_SHORTEN_USERNAME = "error.bad-request.shorten-username";
-    private static final String ERROR_TRY_AGAIN = "error.internal.try-again";
-    private static final String ERROR_TRY_AGAIN_LATER = "error.internal.try-again-later";
-    private static final String ERROR_WE_ARE_FIXING = "error.internal.we-are-fixing";
+    private static final String ERR_TOO_LONG_CODE = "error.bad-request.too-long-code";
+    private static final String ERR_BLANK_USERNAME = "error.bad-request.blank-username";
+    private static final String ERR_TOO_LONG_USERNAME = "error.bad-request.too-long-username";
+    private static final String ERR_NO_STORED_CODE_FOR_THIS_USER = "error.bad-request.no-stored-code-for-this-user";
+    private static final String ERR_NO_RESULT_FOR_THIS_KEY = "error.internal.no-result-for-this-key";
+    private static final String ERR_SERVICE_UNAVAILABLE = "error.internal.service-unavailable";
 
     private final QueueService queueService;
-    private final MessageSource messageSource;
 
     @Value("${redis.url}")
     private String redisUrl;
@@ -47,29 +44,37 @@ public class Main {
 
     @Value("${code.max-length}")
     private Integer maxCodeLength;
+    @Value("${username.max-length}")
+    private Integer maxUsernameLength;
 
     /**
      * Handles code execution request. If everything is fine it sends to the queue, otherwise throw an exception
      *
      * @param code Object contains username and code text
-     * @return OK
      * @throws BadRequestException Text message if sent data doesn't fit all criteria
+     * @throws InternalException Text message if AMQP service is unavailable
      */
-    public ResponseEntity<String> handleExecuteRequest(Code code) throws BadRequestException {
+    public void handleExecuteRequest(Code code) throws BadRequestException, InternalException {
+        StringBuilder errorStack = new StringBuilder();
         int codeLength = code.getCode().length();
+        if (!code.getUsername().isBlank()) {
+            if (code.getUsername().length() > maxUsernameLength) {
+                errorStack.append(ERR_TOO_LONG_USERNAME).append(";");
+            }
+        } else {
+            errorStack.append(ERR_BLANK_USERNAME).append(";");
+        }
         if (codeLength > maxCodeLength) {
-            throw new BadRequestException(
-                    messageSource.getMessage(ERROR_SHORTEN_YOUR_CODE, new Object[]{maxCodeLength, codeLength}, LocaleContextHolder.getLocale())
-            );
+            errorStack.append(ERR_TOO_LONG_CODE).append(";");
         }
-        log.info("[execute] received {}", code);
-
-        if (code.getUsername().isBlank()) {
-            return ResponseEntity.badRequest().build();
+        if (errorStack.length() > 0) {
+            throw new BadRequestException(errorStack.toString());
         }
-        queueService.send(code);
-
-        return ResponseEntity.ok("Accepted");
+        try {
+            queueService.send(code);
+        } catch (AmqpException e) {
+            throw new InternalException(ERR_SERVICE_UNAVAILABLE, e);
+        }
     }
 
     /**
@@ -77,20 +82,21 @@ public class Main {
      *
      * @param username Name of a user who's code is required
      * @param rawCode  Code is been typing by candidate
+     * @throws InternalException Text message if it's can't to create a file
      */
-    public void saveTmpCodeFile(final String username, final String rawCode) {
+    public void saveTmpCodeFile(final String username, final String rawCode) throws InternalException {
         try {
             final Path filePath = Paths.get(TMP_CODE_PATH, username);
             if (!Files.exists(filePath)) {
                 try {
                     Files.createDirectories(filePath);
                 } catch (IOException ioException) {
-                    throw new InternalException(ERROR_TRY_AGAIN_LATER, ioException);
+                    throw new InternalException(ERR_SERVICE_UNAVAILABLE, ioException);
                 }
             }
             Files.write(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME), rawCode.getBytes(), StandardOpenOption.CREATE);
         } catch (IOException e) {
-            throw new InternalException(ERROR_TRY_AGAIN_LATER, e);
+            throw new InternalException(ERR_SERVICE_UNAVAILABLE, e);
         }
     }
 
@@ -99,30 +105,38 @@ public class Main {
      *
      * @param username Name of a user who's code is required
      * @return Code as text
+     * @throws BadRequestException Text message if no stored code for provided username
+     * @throws InternalException Text message if file doesn't exist
      */
-    public String getTmpCodeFile(final String username) {
+    public Result getTmpCodeFile(final String username) throws BadRequestException, InternalException {
         final Path filePath = Paths.get(TMP_CODE_PATH, username);
-        byte[] b = new byte[1];
-        try {
-            b = Files.readAllBytes(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME));
-        } catch (IOException e) {
-            log.error(e.getMessage(), e);
+        if (!Files.exists(filePath)) {
+            throw new BadRequestException(ERR_NO_STORED_CODE_FOR_THIS_USER);
         }
-        return new String(b);
+        try {
+            return new Result(new String(Files.readAllBytes(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME))), "");
+        } catch (IOException e) {
+            throw new InternalException(ERR_SERVICE_UNAVAILABLE, e);
+        }
     }
 
     /**
      * Returns code execution result by username MD5 hash
      *
      * @param userNameMD5Hash MD5 hash of username
-     * @return code execution result
+     * @return Code execution result
+     * @throws BadRequestException Text message if no stored result for provided username
+     * @throws InternalException Text message if storage is unavailable
      */
-    public Result getResultByCodeHash(String userNameMD5Hash) {
+    public Result getResultByCodeHash(String userNameMD5Hash) throws BadRequestException, InternalException {
         Config config = new Config();
         try {
             config.useSingleServer().setAddress(redisUrl);
             RedissonClient redisson = Redisson.create(config);
             RMap<String, String> map = redisson.getMap(redisMapName);
+            if (!map.containsKey(userNameMD5Hash)) {
+                throw new BadRequestException(ERR_NO_STORED_CODE_FOR_THIS_USER);
+            }
             String mapValue = map.get(userNameMD5Hash);
             log.info("Value from map {} is {} by key {}", redisMapName, mapValue, userNameMD5Hash);
             redisson.shutdown();
@@ -133,10 +147,10 @@ public class Main {
                     return new Result("", mapValue);
                 }
             } else {
-                throw new InternalException(messageSource.getMessage(ERROR_TRY_AGAIN, null, LocaleContextHolder.getLocale()), null);
+                throw new InternalException(ERR_NO_RESULT_FOR_THIS_KEY, null);
             }
         } catch (Exception e) {
-            throw new InternalException(messageSource.getMessage(ERROR_TRY_AGAIN, null, LocaleContextHolder.getLocale()), null);
+            throw new InternalException(ERR_SERVICE_UNAVAILABLE, e);
         }
     }
 }

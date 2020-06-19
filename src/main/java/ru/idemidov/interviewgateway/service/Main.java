@@ -42,6 +42,7 @@ public class Main {
     private static final String ERR_NO_RESULT_FOR_THIS_KEY = "error.internal.no-result-for-this-key";
     private static final String ERR_SERVICE_UNAVAILABLE = "error.internal.service-unavailable";
 
+    private final ApiKeySettingsManager apiKeySettingsManager;
     private final QueueService queueService;
     private final RedisTemplate<String, String> redisTemplate;
 
@@ -141,27 +142,12 @@ public class Main {
 
     private void validateRawCode(Code code) throws BadRequestException {
         StringBuilder errorStack = new StringBuilder();
-        Properties prop = new Properties();
         try {
-            prop.load(new FileReader("api-key.properties"));
-        } catch (IOException e) {
-            e.printStackTrace();
+            apiKeySettingsManager.checkProvidedData(code.getUsername(), code.getApiKey());
+        } catch (BadRequestException e) {
+            errorStack.append(e.getMessage()).append(";");
         }
 
-        if (code.getApiKey() != null && !code.getApiKey().isBlank()) {
-            if (!prop.containsKey(code.getApiKey())) {
-                errorStack.append(ERR_INVALID_API_KEY).append(";");
-            }
-        }
-
-        String username = code.getUsername();
-        if (username != null && !username.isBlank()) {
-            if (username.length() > maxUsernameLength) {
-                errorStack.append(ERR_TOO_LONG_USERNAME).append(";");
-            }
-        } else {
-            errorStack.append(ERR_BLANK_USERNAME).append(";");
-        }
         if (code.getCode().length() > maxCodeLength) {
             errorStack.append(ERR_TOO_LONG_CODE).append(";");
         }

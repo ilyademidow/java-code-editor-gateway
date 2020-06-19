@@ -12,8 +12,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.idemidov.interviewgateway.exceptions.BadRequestException;
 import ru.idemidov.interviewgateway.exceptions.InternalException;
+import ru.idemidov.interviewgateway.model.ApiKeySettings;
 import ru.idemidov.interviewgateway.model.Code;
 import ru.idemidov.interviewgateway.model.Result;
+import ru.idemidov.interviewgateway.service.ApiKeySettingsManager;
 import ru.idemidov.interviewgateway.service.Main;
 
 import java.util.Arrays;
@@ -26,6 +28,7 @@ import java.util.Arrays;
 public class MainController {
 
     private final Main codeService;
+    private final ApiKeySettingsManager apiKeySettingsManager;
     private final MessageSource messageSource;
 
     @Value("${code.max-length}")
@@ -102,6 +105,18 @@ public class MainController {
         } catch (InternalException e) {
             log.error(e.getMessage());
             return new ResponseEntity<>(new Result("", messageSource.getMessage(e.getMessage(), null, LocaleContextHolder.getLocale())), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping(value = "check_settings", consumes = MediaType.ALL_VALUE)
+    @ApiOperation(value = "Returns all limits for provided API key and username")
+    public ResponseEntity<Result> getApiKeySettings(@RequestParam String username, @RequestParam String apiKey) {
+        log.info("[getApiKeySettings] received {} {}", username, apiKey);
+        try {
+            return ResponseEntity.ok(new Result(apiKeySettingsManager.getSettings(username, apiKey).toString(), ""));
+        } catch (BadRequestException e) {
+            log.warn(e.getMessage());
+            return ResponseEntity.badRequest().body(new Result("", messageSource.getMessage(e.getMessage(), null, LocaleContextHolder.getLocale())));
         }
     }
 }

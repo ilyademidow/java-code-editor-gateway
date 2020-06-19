@@ -8,17 +8,23 @@ import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.springframework.amqp.AmqpException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import ru.idemidov.interviewgateway.exceptions.BadRequestException;
 import ru.idemidov.interviewgateway.exceptions.InternalException;
 import ru.idemidov.interviewgateway.model.Code;
 import ru.idemidov.interviewgateway.model.Result;
 
+import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
@@ -32,13 +38,13 @@ public class Main {
     private static final String ERR_BLANK_USERNAME = "error.bad-request.blank-username";
     private static final String ERR_TOO_LONG_USERNAME = "error.bad-request.too-long-username";
     private static final String ERR_NO_STORED_CODE_FOR_THIS_USER = "error.bad-request.no-stored-code-for-this-user";
+    private static final String ERR_INVALID_API_KEY = "error.bad-request.invalid-api-key";
     private static final String ERR_NO_RESULT_FOR_THIS_KEY = "error.internal.no-result-for-this-key";
     private static final String ERR_SERVICE_UNAVAILABLE = "error.internal.service-unavailable";
 
     private final QueueService queueService;
+    private final RedisTemplate<String, String> redisTemplate;
 
-    @Value("${redis.url}")
-    private String redisUrl;
     @Value("${redis.map}")
     private String redisMapName;
 
@@ -47,29 +53,16 @@ public class Main {
     @Value("${username.max-length}")
     private Integer maxUsernameLength;
 
+
     /**
      * Handles code execution request. If everything is fine it sends to the queue, otherwise throw an exception
      *
      * @param code Object contains username and code text
      * @throws BadRequestException Text message if sent data doesn't fit all criteria
-     * @throws InternalException Text message if AMQP service is unavailable
+     * @throws InternalException   Text message if AMQP service is unavailable
      */
     public void handleExecuteRequest(Code code) throws BadRequestException, InternalException {
-        StringBuilder errorStack = new StringBuilder();
-        int codeLength = code.getCode().length();
-        if (!code.getUsername().isBlank()) {
-            if (code.getUsername().length() > maxUsernameLength) {
-                errorStack.append(ERR_TOO_LONG_USERNAME).append(";");
-            }
-        } else {
-            errorStack.append(ERR_BLANK_USERNAME).append(";");
-        }
-        if (codeLength > maxCodeLength) {
-            errorStack.append(ERR_TOO_LONG_CODE).append(";");
-        }
-        if (errorStack.length() > 0) {
-            throw new BadRequestException(errorStack.toString());
-        }
+        validateRawCode(code);
         try {
             queueService.send(code);
         } catch (AmqpException e) {
@@ -78,15 +71,15 @@ public class Main {
     }
 
     /**
-     * Read temporary code (can be use for an interviewer)
+     * Save temporary code (eventually can be use for an interviewer)
      *
-     * @param username Name of a user who's code is required
-     * @param rawCode  Code is been typing by candidate
+     * @param code Object contains username and code text
      * @throws InternalException Text message if it's can't to create a file
      */
-    public void saveTmpCodeFile(final String username, final String rawCode) throws InternalException {
+    public void saveTmpCodeFile(final Code code) throws BadRequestException, InternalException {
+        validateRawCode(code);
         try {
-            final Path filePath = Paths.get(TMP_CODE_PATH, username);
+            final Path filePath = Paths.get(TMP_CODE_PATH, code.getUsername());
             if (!Files.exists(filePath)) {
                 try {
                     Files.createDirectories(filePath);
@@ -94,7 +87,7 @@ public class Main {
                     throw new InternalException(ERR_SERVICE_UNAVAILABLE, ioException);
                 }
             }
-            Files.write(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME), rawCode.getBytes(), StandardOpenOption.CREATE);
+            Files.write(Paths.get(filePath.toString(), TMP_CODE_FILE_NAME), code.getCode().getBytes(), StandardOpenOption.CREATE);
         } catch (IOException e) {
             throw new InternalException(ERR_SERVICE_UNAVAILABLE, e);
         }
@@ -106,7 +99,7 @@ public class Main {
      * @param username Name of a user who's code is required
      * @return Code as text
      * @throws BadRequestException Text message if no stored code for provided username
-     * @throws InternalException Text message if file doesn't exist
+     * @throws InternalException   Text message if file doesn't exist
      */
     public Result getTmpCodeFile(final String username) throws BadRequestException, InternalException {
         final Path filePath = Paths.get(TMP_CODE_PATH, username);
@@ -126,31 +119,54 @@ public class Main {
      * @param userNameMD5Hash MD5 hash of username
      * @return Code execution result
      * @throws BadRequestException Text message if no stored result for provided username
-     * @throws InternalException Text message if storage is unavailable
+     * @throws InternalException   Text message if storage is unavailable
      */
     public Result getResultByCodeHash(String userNameMD5Hash) throws BadRequestException, InternalException {
-        Config config = new Config();
-        try {
-            config.useSingleServer().setAddress(redisUrl);
-            RedissonClient redisson = Redisson.create(config);
-            RMap<String, String> map = redisson.getMap(redisMapName);
-            if (!map.containsKey(userNameMD5Hash)) {
-                throw new BadRequestException(ERR_NO_STORED_CODE_FOR_THIS_USER);
-            }
-            String mapValue = map.get(userNameMD5Hash);
-            log.info("Value from map {} is {} by key {}", redisMapName, mapValue, userNameMD5Hash);
-            redisson.shutdown();
-            if (mapValue != null) {
-                if (mapValue.contains("Exit code 0")) {
-                    return new Result(mapValue, "");
-                } else {
-                    return new Result("", mapValue);
-                }
+        Map<Object, Object> map = redisTemplate.opsForHash().entries(redisMapName);
+        if (!map.containsKey(userNameMD5Hash)) {
+            throw new BadRequestException(ERR_NO_STORED_CODE_FOR_THIS_USER);
+        }
+        String mapValue = (String) map.get(userNameMD5Hash);
+        log.info("Value from map {} is {} by key {}", redisMapName, mapValue, userNameMD5Hash);
+        if (mapValue != null) {
+            if (mapValue.contains("Exit code 0")) {
+                return new Result(mapValue, "");
             } else {
-                throw new InternalException(ERR_NO_RESULT_FOR_THIS_KEY, null);
+                return new Result("", mapValue);
             }
-        } catch (Exception e) {
-            throw new InternalException(ERR_SERVICE_UNAVAILABLE, e);
+        } else {
+            throw new InternalException(ERR_NO_RESULT_FOR_THIS_KEY, null);
+        }
+    }
+
+    private void validateRawCode(Code code) throws BadRequestException {
+        StringBuilder errorStack = new StringBuilder();
+        Properties prop = new Properties();
+        try {
+            prop.load(new FileReader("api-key.properties"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        if (code.getApiKey() != null && !code.getApiKey().isBlank()) {
+            if (!prop.containsKey(code.getApiKey())) {
+                errorStack.append(ERR_INVALID_API_KEY).append(";");
+            }
+        }
+
+        String username = code.getUsername();
+        if (username != null && !username.isBlank()) {
+            if (username.length() > maxUsernameLength) {
+                errorStack.append(ERR_TOO_LONG_USERNAME).append(";");
+            }
+        } else {
+            errorStack.append(ERR_BLANK_USERNAME).append(";");
+        }
+        if (code.getCode().length() > maxCodeLength) {
+            errorStack.append(ERR_TOO_LONG_CODE).append(";");
+        }
+        if (errorStack.length() > 0) {
+            throw new BadRequestException(errorStack.toString());
         }
     }
 }

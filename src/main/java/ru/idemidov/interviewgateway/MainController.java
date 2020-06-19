@@ -45,7 +45,7 @@ public class MainController {
             StringBuilder msgStack = new StringBuilder();
             Arrays.stream(e.getMessage().split(";")).forEach(
                     message ->
-                            msgStack.append(messageSource.getMessage(message, new Object[] {maxCodeLength, maxUsernameLength}, LocaleContextHolder.getLocale())).append(" ")
+                            msgStack.append(messageSource.getMessage(message, new Object[] {maxCodeLength, maxUsernameLength}, LocaleContextHolder.getLocale())).append("; ")
             );
             return ResponseEntity.badRequest().body(new Result("", msgStack.toString()));
         } catch (InternalException e) {
@@ -74,8 +74,16 @@ public class MainController {
     public ResponseEntity<Result> saveTmp(@RequestBody Code code) {
         log.info("[saveTmp] received {}", code);
         try {
-            codeService.saveTmpCodeFile(code.getUsername(), code.getCode());
+            codeService.saveTmpCodeFile(code);
             return ResponseEntity.ok().build();
+        } catch (BadRequestException e) {
+            log.warn(e.getMessage());
+            StringBuilder msgStack = new StringBuilder();
+            Arrays.stream(e.getMessage().split(";")).forEach(
+                    message ->
+                            msgStack.append(messageSource.getMessage(message, new Object[] {maxCodeLength, maxUsernameLength}, LocaleContextHolder.getLocale())).append("; ")
+            );
+            return ResponseEntity.badRequest().body(new Result("", msgStack.toString()));
         } catch (InternalException e) {
             log.error(e.getMessage());
             return new ResponseEntity<>(new Result("", messageSource.getMessage(e.getMessage(), null, LocaleContextHolder.getLocale())), HttpStatus.INTERNAL_SERVER_ERROR);

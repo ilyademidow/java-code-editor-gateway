@@ -15,6 +15,8 @@ import java.io.Serializable;
 public class Code implements Serializable {
     @ApiModelProperty(value = "Spaces not allowed", dataType = "String", example="donald_knutt")
     private String username;
+    @ApiModelProperty(value = "Provided API key", dataType = "String", example="demo")
+    private String apiKey;
     @ApiModelProperty(value = "Java class implementation", dataType = "String", example="class Main { public static void main(String[] args) { System.out.println(\"Hello world!\"); } }")
     private String code;
 }

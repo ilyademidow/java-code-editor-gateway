@@ -22,6 +22,7 @@ import java.util.Map;
 @Slf4j
 @RequiredArgsConstructor
 public class Main {
+    private static final String DEMO_KEY = "demo";
     private static final String TMP_CODE_FILE_NAME = "java_code_tmp.txt";
     private static final String TMP_CODE_PATH = "interview";
 
@@ -43,6 +44,8 @@ public class Main {
 
     @Value("${code.max-length}")
     private Integer maxCodeLength = 128;
+    @Value("${code.demo.max-length}")
+    private Integer demoMaxCodeLength = 128;
     @Value("${username.max-length}")
     private Integer maxUsernameLength = 32;
 
@@ -140,8 +143,14 @@ public class Main {
             errorStack.append(e.getMessage()).append(";");
         }
 
-        if (code.getCode().length() > maxCodeLength) {
-            errorStack.append(ERR_TOO_LONG_CODE).append(";");
+        if (code.getCode() != null) {
+            int maxCodeLengthForApiKey = maxCodeLength;
+            if (code.getApiKey() != null && DEMO_KEY.equals(code.getApiKey())) {
+                maxCodeLengthForApiKey = demoMaxCodeLength;
+            }
+            if (code.getCode().length() > maxCodeLengthForApiKey) {
+                errorStack.append(ERR_TOO_LONG_CODE).append(";");
+            }
         }
         if (errorStack.length() > 0) {
             throw new BadRequestException(errorStack.toString());

@@ -39,12 +39,12 @@ public class Main {
     private final RedisTemplate<String, String> redisTemplate;
 
     @Value("${redis.map}")
-    private String redisMapName;
+    private String redisMapName = "code-result";
 
     @Value("${code.max-length}")
-    private Integer maxCodeLength;
+    private Integer maxCodeLength = 128;
     @Value("${username.max-length}")
-    private Integer maxUsernameLength;
+    private Integer maxUsernameLength = 32;
 
 
     /**

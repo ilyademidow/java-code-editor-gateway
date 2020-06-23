@@ -27,14 +27,10 @@ public class ApiKeySettingsManager {
     private final ApiKeySettingsRepository apiKeySettingsRepository;
 
     @Value("${username.max-length}")
-    private Integer maxUsernameLength;
+    private Integer maxUsernameLength = 32;
 
-    public boolean checkProvidedData(String username, String apiKey) {
-        try {
-            return validateProvidedData(username, apiKey);
-        } catch (Exception e) {
-            return false;
-        }
+    public boolean checkProvidedData(String username, String apiKey) throws BadRequestException {
+        return validateProvidedData(username, apiKey);
     }
 
     public ApiKeySettings getSettings(String username, String apiKey) throws BadRequestException {
@@ -66,6 +62,8 @@ public class ApiKeySettingsManager {
                 if (!username.equals(settings.getUsername())) {
                     throw new BadRequestException(ERR_INVALID_API_KEY);
                 }
+            } else {
+                throw new BadRequestException(ERR_INVALID_API_KEY);
             }
         }
 

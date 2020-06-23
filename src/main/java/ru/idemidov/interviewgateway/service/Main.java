@@ -2,10 +2,6 @@ package ru.idemidov.interviewgateway.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.Redisson;
-import org.redisson.api.RMap;
-import org.redisson.api.RedissonClient;
-import org.redisson.config.Config;
 import org.springframework.amqp.AmqpException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -15,16 +11,12 @@ import ru.idemidov.interviewgateway.exceptions.InternalException;
 import ru.idemidov.interviewgateway.model.Code;
 import ru.idemidov.interviewgateway.model.Result;
 
-import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j

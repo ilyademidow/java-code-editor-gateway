@@ -3,6 +3,7 @@ build:
   stage: build
   script:
     - mvn clean package
+    - ssh-keyscan -t rsa idemidov.ru >> ~/.ssh/known_hosts
     - scp target/code-editor-gateway.jar admin@idemidov.ru:/home/admin/Projects/web-ide-project
   artifacts:
     expire_in: 10 days

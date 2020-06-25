@@ -3,8 +3,8 @@ build:
   stage: build
   script:
     - mvn clean package
-    - mkdir .ssh
-    - chmod 700 .ssh
+    - mkdir ~/.ssh
+    - chmod 700 ~/.ssh
     - ssh-keyscan -t rsa idemidov.ru >> ~/.ssh/known_hosts
     - scp target/code-editor-gateway.jar admin@idemidov.ru:/home/admin/Projects/web-ide-project
   artifacts:

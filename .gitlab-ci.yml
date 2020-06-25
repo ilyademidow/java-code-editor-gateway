@@ -2,7 +2,7 @@ build:
   image: maven:3.6.3-openjdk-11-slim
   stage: build
   script:
-    - sudo apt-get install openssh-client -y
+    - apt-get install openssh-client -y
     - mvn clean package
     - scp target/code-editor-gateway.jar admin@idemidov.ru:/home/admin/Projects/web-ide-project
   artifacts:
